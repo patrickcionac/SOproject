@@ -1,3 +1,4 @@
+#include "treasure.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -6,19 +7,11 @@
 #include <time.h>
 #include <stdlib.h>
 #include <errno.h>
-
-typedef struct {
-    char id[10];
-    char user[25];
-    double lat, lon;
-    char clue[20];
-    int value;
-} treasure;
  
 
 void log_updates(char huntID[] , char action[]){
     static char path[128];
-    snprintf(path , sizeof(path) , "%s/%s" , huntID , "logged_hunt");
+    snprintf(path , sizeof(path) , "%s%s/%s" , "hunts/" , huntID , "logged_hunt");
  
     int file = open(path , O_WRONLY | O_CREAT | O_APPEND , 0777);
 
@@ -26,6 +19,10 @@ void log_updates(char huntID[] , char action[]){
     dprintf(file , "%s : %s\n" , ctime(&now) , action);
     close(file);
     //with " cat "file_name" " command in the terminal you can see the updates of the function
+}
+
+int get_treasure_file_path(char huntID[] , char path[]){
+    return snprintf(path , 128 , "%s%s/treasure.bin" , "hunts/" , huntID);
 }
 
 void create(char* hunt) {
