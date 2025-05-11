@@ -1,13 +1,14 @@
-#include "treasure.h"
+#include "treasure_manager.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
 #include <stdlib.h>
 #include <errno.h>
- 
+#include <dirent.h>
 
 void log_updates(char huntID[] , char action[]){
     static char path[128];
@@ -73,7 +74,28 @@ void create(char* hunt) {
     snprintf(linkName , sizeof(linkName) , "logged_hunt-%s" , hunt);
     symlink(log_path , linkName);
 }
- 
+
+void print_treasure(char *tr_path){
+    int f = open(tr_path , O_RDONLY);
+
+    if(!f){
+        exit(-1);
+    }
+
+    treasure t;
+    int nr = 1;
+    while(read(f , &t , sizeof(treasure))){
+        printf("Treasure no.%d\n" , nr++);
+        printf("ID: %s\n", t.id);
+        printf("Username: %s\n", t.user);
+        printf("GPS Longitude: %lf\n", t.lon);
+        printf("GPS Latitude: %lf\n", t.lat);
+        printf("Clue: %s\n", t.clue);
+        printf("Value: %d\n\n\n",t.value);
+    }
+}
+
+
 void view(char huntID[] , char treasureID[]){
  
     static char path[128];
@@ -177,78 +199,51 @@ void remove_hunt(char huntID[]){
     unlink(linkName);
 }
  
-
- 
-int main(int argc, char** argv) {
- 
-    if (argc > 1) {
-        if (strcmp(argv[1], "--add") == 0) {
-            struct stat path_stat;
-            if (stat(argv[2], &path_stat) == 0) {
-                if (S_ISDIR(path_stat.st_mode)) {
-                    create(argv[2]);
-                }
-            }
-            else {
- 
-                mkdir(argv[2], 0777);
-                create(argv[2]);
-            }
-        }
-        else if (strcmp(argv[1], "--list") == 0) {
-           if(argc > 2){
-                struct stat path_stat;
-            if (stat(argv[2], &path_stat) == 0) {
-                if (S_ISDIR(path_stat.st_mode)) {
-                    list(argv[2]);
-                }
-            }
-            else {
- 
-                mkdir(argv[2], 0777);
-                list(argv[2]);
-            }
-            } 
-        }
-        else if (strcmp(argv[1], "--view") == 0) {
-            if(argc > 3){
-                view(argv[2] , argv[3]);
-            }
-            else{
-                printf("Usage: --view <huntID> <treasureID>");
-            }
-        }
-        else if (strcmp(argv[1], "--remove_treasure") == 0) {
-            if(argc > 3){
-                remove_treasure(argv[2] , argv[3]);
-            }
-            else{
-                printf("Usage: --remove_treasure <huntID> <treasureID>");
-            }
-        }
-        else if (strcmp(argv[1], "--remove_hunt") == 0) {
-            if(argc > 2){
-                struct stat path_stat;
-            if (stat(argv[2], &path_stat) == 0) {
-                if (S_ISDIR(path_stat.st_mode)) {
-                    remove_hunt(argv[2]);
-                }
-            }
-            else {
- 
-                printf("Hunt '%s' does not exist.\n" , argv[2]);
-                }
-            }
-            else{
-                printf("Usage: --remove_treasure <huntID> <treasureID>");
-            }
-
-        }
- 
+int get_treasure_nr(char *path){
+    int f = open(path , O_RDONLY);
+    if(!f){
+        exit(-1);
     }
-    else {
-        printf("Usage: treasure_manager --opt");
-    }
-
-    return 0;
+    treasure t;
+    int c =  0;
+    while(read(f , &t , sizeof(treasure))) c++;
+    close(f);
+    return c;
 }
+
+void list_hunts(char *hunts_path){
+    DIR *d;
+    if((d = opendir(hunts_path)) == NULL){
+        exit(-1);
+    }
+    struct dirent *dir;
+
+    while((dir = readdir(d)) != NULL){
+        if(strcmp(dir->d_name , ".") == 0 || strcmp(dir->d_name , "..") == 0){
+            continue;
+        }
+            struct stat st;
+            char path[1024];
+            int written = snprintf(path, sizeof(path), "%s%s",hunts_path , dir->d_name); 
+            if (written < 0 || written >= sizeof(path)) {
+                perror("Path too long\n");
+                exit(-1);
+            }
+            if(stat(path,&st) == -1){
+                perror("stat failed\n");
+                exit(-1);
+            }
+            if(S_ISDIR(st.st_mode)){
+                printf("%s: ", dir->d_name);
+                char treasure_path[1024];
+                written = snprintf(treasure_path, sizeof(treasure_path), "%s/treasure_%s.bin", path ,dir->d_name); 
+                if (written < 0 || written >= sizeof(path)) {
+                    perror("Path too long\n");
+                    exit(-1);
+                }
+                printf("%d treasure uri\n", get_treasure_nr(treasure_path));
+      }
+    }
+    closedir(d);
+}
+

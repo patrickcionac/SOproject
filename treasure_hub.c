@@ -1,3 +1,7 @@
+#define _GNU_SOURCE
+#include "treasure_hub.h"
+#include "treasure_manager.h"
+#include "treasure_manager.c"
 #include <signal.h>
 #include <sys/wait.h>
 #include <stdio.h>
@@ -6,17 +10,33 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <fcntl.h>
-#include "treasure.h"
 
 pid_t monitor_pid = -1;
 int monitor_running = 0;
+int monitor_stopping = 0;
 
-void send_signal(const char *cmd){
-    FILE *f = fopen(CMD_FILE , "w");
-    if(!f) return;
+void send_arg(const char *cmd){
+    FILE *f = fopen("cmd.txt" , "a");
+    if(!f) exit(-1);
     fprintf(f , "%s\n" , cmd);
     fclose(f);
-    kill(monitor_pid , SIGUSR1);
+}
+
+void send_signal(){
+    if(monitor_pid != -1)  kill(monitor_pid , SIGUSR1); 
+}
+
+
+void monitor_connect(){
+    struct sigaction sa_sigusr1;
+    sa_sigusr1.sa_handler = handle_sigusr1;
+    sigemptyset(&sa_sigusr1.sa_mask); 
+    sa_sigusr1.sa_flags = 0; 
+
+    sigaction(SIGUSR1, &sa_sigusr1, NULL);
+    while(1){
+        pause();
+    }
 }
 
 void start_monitor(){
@@ -25,88 +45,113 @@ void start_monitor(){
         return;
     }
 
+    monitor_running = 1;
     monitor_pid = fork();
 
     
     if(monitor_pid == 0){
-        execl("./monitor" , "monitor" , NULL);
-        perror("Execution failed");
+        monitor_connect();
         exit(-1);
     }
-    else{
-        monitor_running = 1;
+    else if(monitor_pid > 0){
         printf("Monitor started with PID %d.\n" , monitor_pid);
     }
+    else{
+        perror("Failed to start monitor.\n");
+    }
 }
+
 
 void stop_monitor(){
     if(!monitor_running){
         printf("No monitor running.\n");
         return;
     }
-
+    printf("Monitor will be stopped...\n");
+    usleep(100000);
     kill(monitor_pid , SIGTERM);
-    waitpid(monitor_pid , NULL , 0);
-    monitor_running = 0;
-    printf("Sent stop signal to monitor (%d) \n" , monitor_pid);
-}
-
-
-int main(int argc , char **argv){
-    char command[128];
-   
-
-    while(1){
-        printf("> ");
-        fflush(stdout);
-
-        if(!fgets(command , sizeof(command) , stdin)) {
-            printf("Error reading input.\n");
-            break;
-        }
-
-        command[strcspn(command , "\n")] = 0;
-
-        if(strcmp(command , "start_monitor") == 0){
-            if(monitor_running){
-                printf("Monitor already running.\n");
-            }
-            else{
-                start_monitor();
-                printf("Monitor started.\n");
-            }
-        }
-        else if (strncmp(command, "list_hunts", 10) == 0 ||
-                 strncmp(command, "list_treasures", 14) == 0 ||
-                 strncmp(command, "view_treasure", 13) == 0) {
-
-             if (!monitor_running) {
-              printf("Monitor not running.\n");
-              continue;
-            }
-              send_signal(command);
-        }
-        else if (strcmp(command, "stop_monitor") == 0) {
-            if (!monitor_running) {
-                printf("Monitor is not running.\n");
-            } else {
-                // TODO: Signal monitor to stop
-                printf("Monitor stopping...\n");
-                stop_monitor();
-            }
-        }
-        else if(strcmp(command , "exit") == 0){
-            if(monitor_pid > 0){
-                printf("Cannot exit: monitor still running.\n");
-            }
-            else{
-                printf("Exiting hub.\n");
-                break;
-            }
-        }
-        else{
-            printf("Command '%s' unknown." , command);
+    monitor_stopping = 1;
+    while( monitor_pid != -1 ){
+        char cmd[31];
+        if(scanf("%s", cmd) == 1){
+            printf("Command <%s> couldn't be processed while monitor is stopping\n", cmd);
         }
     }
-    return 0;
+
+    int status;
+    waitpid(monitor_pid , &status , 0);
+    if (WIFEXITED(status)) {
+        printf("Monitor exited with status %d\n", WEXITSTATUS(status));
+    } else if (WIFSIGNALED(status)) {
+        printf("Monitor terminated by signal %d\n", WTERMSIG(status));
+    } else {
+        printf("Monitor exited abnormally\n");
+    }
 }
+
+void handle_sigusr1(int sig) {
+    FILE* cmdf = fopen("cmd.txt", "r");
+    if (!cmdf) return;
+
+    char args1[31];
+    char *args2[5];
+    int i = 0;
+    args2[i] = malloc(strlen("treasure_manager") + 1);
+    if( args2[i] == NULL ){
+        perror("malloc failed");
+        exit(-1);
+    }
+
+    strcpy(args2[i++], "treasure_manager");
+    while(fgets(args1,sizeof(args1),cmdf) != NULL){
+        args1[strcspn(args1, "\n")] = 0;
+        args2[i] = malloc(strlen(args1) + 1);
+        if( args2[i] == NULL ){
+            perror("malloc failed");
+            for( int j = i - 1; j >=0 ; j--){
+                free(args2[j]);
+            }
+            exit(-1);
+        }
+        strcpy(args2[i++], args1);
+    }   
+    args2[i] = NULL;
+
+    fclose(cmdf); 
+
+    int pid = vfork();
+    if(pid == 0 ){
+        char cwd[1024];
+        getcwd(cwd,sizeof(cwd));
+
+        char exec_path[1024];
+        int written = snprintf(exec_path, sizeof(exec_path), "%s/treasure_manager",cwd);
+        if (written < 0 || written >= sizeof(exec_path)) {
+            perror("Path too long\n");
+            exit(EXIT_FAILURE);
+        }
+
+        execvp(exec_path,args2);
+        perror("exec failed");
+        exit(-1);
+    }
+    else if(pid > 0 ){
+        int status;
+        waitpid(pid,&status, 0);
+    }
+    else{
+        perror("fork failed");
+        exit(-1);
+    }
+    for (int i = 0; args2[i] != NULL; i++) {
+        free(args2[i]);
+    }
+}
+
+void handle_sigchld(int sig) {
+    if(monitor_stopping){
+        monitor_pid = -1;
+        monitor_stopping = 0;
+    }
+}
+
