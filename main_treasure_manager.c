@@ -1,88 +1,100 @@
-#include "treasure_manager.h"
+#include "treasure_manager_header.h"
 #include "treasure_manager.c"
 
+
+void get_hunt_path(const char *hunt_name, char *path) {
+    snprintf(path, 128, "Hunts/%s", hunt_name);
+}
+
 int main(int argc, char** argv) {
-    
-    char cwd[1024];
-    getcwd(cwd , sizeof(cwd));
-    char cwd_nou[1024];
-    int written = snprintf(cwd_nou , sizeof(cwd_nou) , "%s%s" , cwd , "/Hunts/");
-    if (written < 0 || written >= sizeof(cwd_nou)) {
-        perror("Path too long\n");
-        exit(-1);
-    }  
-
-    if (argc > 1) {
-        if (strcmp(argv[1], "--add") == 0) {
-            struct stat path_stat;  
-            if (stat(argv[2], &path_stat) == 0) {
-                if (S_ISDIR(path_stat.st_mode)) {
-                    create(argv[2]);
-                }
-            }
-            else {
- 
-                mkdir(argv[2], 0777);
-                create(argv[2]);
-            }
-        }
-        else if (strcmp(argv[1], "--list") == 0) {
-           if(argc > 2){
-                struct stat path_stat;
-            if (stat(argv[2], &path_stat) == 0) {
-                if (S_ISDIR(path_stat.st_mode)) {
-                    list(argv[2]);
-                }
-            }
-            else {
- 
-                mkdir(argv[2], 0777);
-                list(argv[2]);
-            }
-            } 
-        }
-        else if (strcmp(argv[1], "--view") == 0) {
-            if(argc > 3){
-                view(argv[2] , argv[3]);
-            }
-            else{
-                printf("Usage: --view <huntID> <treasureID>");
-            }
-        }
-        else if (strcmp(argv[1], "--remove_treasure") == 0) {
-            if(argc > 3){
-                remove_treasure(argv[2] , argv[3]);
-            }
-            else{
-                printf("Usage: --remove_treasure <huntID> <treasureID>");
-            }
-        }
-        else if (strcmp(argv[1], "--remove_hunt") == 0) {
-            if(argc > 2){
-                struct stat path_stat;
-            if (stat(argv[2], &path_stat) == 0) {
-                if (S_ISDIR(path_stat.st_mode)) {
-                    remove_hunt(argv[2]);
-                }
-            }
-            else {
- 
-                printf("Hunt '%s' does not exist.\n" , argv[2]);
-                }
-            }
-            else{
-                printf("Usage: --remove_treasure <huntID> <treasureID>");
-            }
-
-        }
- 
+    if (argc < 2) {
+        printf("Usage: treasure_manager --option [args...]\n");
+        return 1;
     }
-    else if(strcmp(argv[1] , "--list_hunts") == 0){
-        list_hunts(cwd_nou);
-    }
-    else {
-        printf("Usage: treasure_manager --opt");
+
+    if (strcmp(argv[1], "--add") == 0) {
+        if (argc < 3) {
+            printf("Usage: --add <huntID>\n");
+            return 1;
+        }
+
+        char path[128];
+        get_hunt_path(argv[2], path);
+        struct stat path_stat;
+        if (stat(path, &path_stat) != 0) {
+            mkdir(path, 0777);
+        }
+        create(argv[2]);
+
+    } else if (strcmp(argv[1], "--list") == 0) {
+        if (argc < 3) {
+            printf("Usage: --list <huntID>\n");
+            return 1;
+        }
+
+        char path[128];
+        get_hunt_path(argv[2], path);
+        struct stat path_stat;
+        if (stat(path, &path_stat) == 0 && S_ISDIR(path_stat.st_mode)) {
+            list(argv[2]);
+        } else {
+            printf("Hunt '%s' does not exist.\n", argv[2]);
+        }
+
+    } else if (strcmp(argv[1], "--view") == 0) {
+        if (argc < 4) {
+            printf("Usage: --view <huntID> <treasureID>\n");
+            return 1;
+        }
+
+        char path[128];
+        get_hunt_path(argv[2], path);
+        view(argv[2], argv[3]);
+
+    } else if (strcmp(argv[1], "--remove_treasure") == 0) {
+        if (argc < 4) {
+            printf("Usage: --remove_treasure <huntID> <treasureID>\n");
+            return 1;
+        }
+
+        char path[128];
+        get_hunt_path(argv[2], path);
+        remove_treasure(argv[2], argv[3]);
+
+    } else if (strcmp(argv[1], "--remove_hunt") == 0) {
+        if (argc < 3) {
+            printf("Usage: --remove_hunt <huntID>\n");
+            return 1;
+        }
+
+        char path[128];
+        get_hunt_path(argv[2], path);
+        struct stat path_stat;
+        if (stat(path, &path_stat) == 0 && S_ISDIR(path_stat.st_mode)) {
+            remove_hunt(argv[2]);
+        } else {
+            printf("Hunt '%s' does not exist.\n", argv[2]);
+        }
+
+    } else if (strcmp(argv[1], "--list_hunts") == 0) {
+        char hunts_path[256];
+        getcwd(hunts_path , sizeof(hunts_path));
+        int check = snprintf(hunts_path + strlen(hunts_path), 
+        sizeof(hunts_path) - strlen(hunts_path), 
+        "/Hunts");
+
+          if (check < 0 || check >= sizeof(hunts_path) - strlen(hunts_path)) {
+            fprintf(stderr, "Hunts path too long\n");
+            return 1;
+        }
+
+        list_hunts(hunts_path);
+    } else {
+        printf("Unknown option: %s\n", argv[1]);
+        printf("Available options: --add, --list, --view, --remove_treasure, --remove_hunt, --list_hunts\n");
+        return 1;
     }
 
     return 0;
 }
+

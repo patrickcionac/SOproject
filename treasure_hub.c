@@ -1,7 +1,7 @@
 #define _GNU_SOURCE
-#include "treasure_hub.h"
-#include "treasure_manager.h"
-#include "treasure_manager.c"
+#include "treasure_hub_header.h"
+//#include "treasure_manager_header.h"
+//#include "treasure_manager.c"
 #include <signal.h>
 #include <sys/wait.h>
 #include <stdio.h>
@@ -96,13 +96,13 @@ void handle_sigusr1(int sig) {
     char args1[31];
     char *args2[5];
     int i = 0;
-    args2[i] = malloc(strlen("treasure_manager") + 1);
+    args2[i] = malloc(strlen("tm") + 1);
     if( args2[i] == NULL ){
         perror("malloc failed");
         exit(-1);
     }
 
-    strcpy(args2[i++], "treasure_manager");
+    strcpy(args2[i++], "tm");
     while(fgets(args1,sizeof(args1),cmdf) != NULL){
         args1[strcspn(args1, "\n")] = 0;
         args2[i] = malloc(strlen(args1) + 1);
@@ -125,7 +125,7 @@ void handle_sigusr1(int sig) {
         getcwd(cwd,sizeof(cwd));
 
         char exec_path[1024];
-        int written = snprintf(exec_path, sizeof(exec_path), "%s/treasure_manager",cwd);
+        int written = snprintf(exec_path, sizeof(exec_path), "%s/tm",cwd);
         if (written < 0 || written >= sizeof(exec_path)) {
             perror("Path too long\n");
             exit(EXIT_FAILURE);

@@ -1,4 +1,4 @@
-#include "treasure_manager.h"
+#include "treasure_manager_header.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -12,7 +12,7 @@
 
 void log_updates(char huntID[] , char action[]){
     static char path[128];
-    snprintf(path , sizeof(path) , "%s%s/%s" , "hunts/" , huntID , "logged_hunt");
+    snprintf(path , sizeof(path) , "%s%s/%s" , "Hunts/" , huntID , "logged_hunt");
  
     int file = open(path , O_WRONLY | O_CREAT | O_APPEND , 0777);
 
@@ -23,7 +23,7 @@ void log_updates(char huntID[] , char action[]){
 }
 
 int get_treasure_file_path(char huntID[] , char path[]){
-    return snprintf(path , 128 , "%s%s/treasure.bin" , "hunts/" , huntID);
+    return snprintf(path , 256 , "Hunts/%s/treasure.bin" , huntID);
 }
 
 void create(char* hunt) {
@@ -55,15 +55,20 @@ void create(char* hunt) {
  
  
     static char path[128];
-    snprintf(path , sizeof(path) , "%s/%s" , hunt , "treasure.bin");
- 
+    get_treasure_file_path(hunt , path);
+
     int file = open(path , O_WRONLY | O_CREAT | O_APPEND , 0777);
-   
+    if (file < 0) {
+        perror("Error opening treasure file");
+        return;
+    }
+
     //int write(int fileDescriptor, void *buffer, size_t bytesToWrite)
  
     if(write(file , &t , sizeof(treasure)) != sizeof(treasure)){
         printf("Error");
-        //exit(-1);
+        close(file);
+        return;
     }
     close(file);
 
@@ -99,8 +104,8 @@ void print_treasure(char *tr_path){
 void view(char huntID[] , char treasureID[]){
  
     static char path[128];
-    snprintf(path , sizeof(path) , "%s/%s" , huntID , "treasure.bin");
- 
+    get_treasure_file_path(huntID, path);
+
     int file = open(path , O_RDONLY , 0777);
     if(file < 0){
         perror("Error opening the file.\n");
@@ -125,20 +130,29 @@ void view(char huntID[] , char treasureID[]){
 }
  
 void list(char huntID[]){
-    static char path[128];
-    snprintf(path , sizeof(path) , "%s/%s" , huntID , "treasure.bin");
+    static char path[256];
+   
 
-    struct stat st;
-    stat(huntID , &st);
-    int size = st.st_size;
-    time_t last = st.st_mtime;
-    printf("Hunt: %s\nSize of file:%d\nLast mod:%s\n" , huntID , size , ctime(&last));
-    
+    get_treasure_file_path(huntID, path);
+
     int file = open(path , O_RDONLY);
     if(file < 0){
         perror("Error opening the file.\n");
         return;
     }
+
+    struct stat st;
+    if(fstat(file , &st) == -1){
+        perror("Error getting file stats");
+        close(file);
+        return;
+    }
+   
+    int size = st.st_size;
+    time_t last = st.st_mtime;
+    printf("Hunt: %s\nSize of file:%d\nLast mod:%s\n" , huntID , size , ctime(&last));
+    
+   
 
     treasure t;
     while(read(file , &t , sizeof(treasure)) == sizeof(treasure)){
@@ -152,7 +166,7 @@ void list(char huntID[]){
  
 void remove_treasure(char huntID[] , char treasureID[]){
     static char path[128];
-    snprintf(path , sizeof(path) , "%s/%s" , huntID , "treasure.bin");
+    get_treasure_file_path(huntID, path);
     
     int file = open(path , O_RDONLY);
     if(file < 0){
@@ -181,13 +195,16 @@ void remove_treasure(char huntID[] , char treasureID[]){
 void remove_hunt(char huntID[]){
     static char path[128];
     static char log_path[128];
-    snprintf(path , sizeof(path) , "%s/treasure.bin" , huntID);
-    snprintf(log_path , sizeof(log_path) , "%s/logged_hunt" , huntID);
+    static char dir_path[128];
+
+    snprintf(path , sizeof(path) , "Hunts/%s/treasure.bin" , huntID);
+    snprintf(log_path , sizeof(log_path) , "Hunts/%s/logged_hunt" , huntID);
+    snprintf(dir_path, sizeof(dir_path), "Hunts/%s", huntID);
 
     unlink(path);
     unlink(log_path);
 
-    if(rmdir(huntID) == 0){
+    if(rmdir(dir_path) == 0){
         printf("Hunt '%s' removed.\n" , huntID);
     }
     else{
@@ -201,20 +218,20 @@ void remove_hunt(char huntID[]){
  
 int get_treasure_nr(char *path){
     int f = open(path , O_RDONLY);
-    if(!f){
-        exit(-1);
+    if(f < 0){
+        return 0;
     }
     treasure t;
     int c =  0;
-    while(read(f , &t , sizeof(treasure))) c++;
+    while(read(f , &t , sizeof(treasure)) == sizeof(treasure)) c++;
     close(f);
     return c;
 }
 
 void list_hunts(char *hunts_path){
-    DIR *d;
-    if((d = opendir(hunts_path)) == NULL){
-        exit(-1);
+    DIR *d = opendir(hunts_path); 
+    if(!d){
+        return;
     }
     struct dirent *dir;
 
@@ -222,26 +239,27 @@ void list_hunts(char *hunts_path){
         if(strcmp(dir->d_name , ".") == 0 || strcmp(dir->d_name , "..") == 0){
             continue;
         }
+            char hunt_dir_path[256];
+            int check = snprintf(hunt_dir_path , sizeof(hunt_dir_path) , "%s/%s" , hunts_path , dir->d_name);
+            if (check < 0 || check >= sizeof(hunt_dir_path)) {
+                fprintf(stderr, "Path too long, skipping: %s\n", dir->d_name);
+                continue;
+            }
             struct stat st;
-            char path[1024];
-            int written = snprintf(path, sizeof(path), "%s%s",hunts_path , dir->d_name); 
-            if (written < 0 || written >= sizeof(path)) {
-                perror("Path too long\n");
-                exit(-1);
+
+            if (stat(hunt_dir_path, &st) == -1) {
+                perror("stat failed");
+                continue;
             }
-            if(stat(path,&st) == -1){
-                perror("stat failed\n");
-                exit(-1);
-            }
+
             if(S_ISDIR(st.st_mode)){
-                printf("%s: ", dir->d_name);
-                char treasure_path[1024];
-                written = snprintf(treasure_path, sizeof(treasure_path), "%s/treasure_%s.bin", path ,dir->d_name); 
-                if (written < 0 || written >= sizeof(path)) {
-                    perror("Path too long\n");
-                    exit(-1);
+                char treasure_path[256];
+                int check = snprintf(treasure_path, sizeof(treasure_path), "%s/treasure.bin", hunt_dir_path); 
+                if (check < 0 || check >= sizeof(treasure_path)) {
+                    fprintf(stderr, "Path too long, skipping: %s\n", dir->d_name);
+                    continue;
                 }
-                printf("%d treasure uri\n", get_treasure_nr(treasure_path));
+                printf("%s: %d treasure uri\n", dir->d_name , get_treasure_nr(treasure_path));
       }
     }
     closedir(d);

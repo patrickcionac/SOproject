@@ -1,6 +1,8 @@
+#include "treasure_hub_header.h"
+#include "treasure_manager_header.h"
 #include "treasure_hub.c"
-#include "treasure_hub.h"
-#include "treasure_manager.h"
+#include <errno.h>
+//#include "treasure_manager.c"
 
 int main(){
     char cmd[101];
@@ -12,6 +14,7 @@ int main(){
 
     if((sigaction(SIGCHLD, &sigchld, NULL)) == -1)
     {
+
         perror("Error sigaction");
         exit(-1);   
     }
@@ -28,6 +31,7 @@ int main(){
         cmd[strcspn(cmd, "\n")] = 0;
         if(strcmp(cmd, "start_monitor") == 0){
             start_monitor();
+           // monitor_running = 1;
         }
         else if(strcmp(cmd, "list_hunts") == 0){
             if( monitor_running == 0){
@@ -40,7 +44,6 @@ int main(){
             }
             send_arg("--list_hunts");
             send_signal();
-            // printf("list hunts\n");
         }
         else if(strcmp(cmd,"list_treasures") == 0){
             if( monitor_running == 0){
@@ -54,7 +57,6 @@ int main(){
             send_arg("--list");
             printf("Please enter the hunt you would like to be displayed: ");
             char hunt[20];
-            // fgets(stdin,sizeof(hunt), hunt);
             scanf("%19s",hunt);
             getchar();
             printf("\n");
@@ -102,9 +104,9 @@ int main(){
         else if(strcmp(cmd, "clear") == 0){
             system("clear");
         }
-        else if(strcmp(cmd, "calculate_score") == 0){
+     /*   else if(strcmp(cmd, "calculate_score") == 0){
             
-        }
+        } */
         else{
             printf("Unknown command\n");
         }
